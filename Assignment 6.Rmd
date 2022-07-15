@@ -1,0 +1,115 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+title: "Assignment 6"
+author: "David Bedoian 94191"
+---
+# Setup
+```{r, message=FALSE, warning=FALSE}
+setwd("C:/Users/OnetoFive/OneDrive/SSE/Courses/Introduction into R/Assignment 6/Assignment 6")
+
+## loads packages
+library(plyr) 
+library(tidyverse)
+library(rio)
+library(magrittr)
+library(broom)
+library(stargazer)
+library(lmtest)
+library(sandwich)
+library(ggthemes)
+library(stargazer)
+```
+
+## Table 1
+```{r, message=FALSE}
+# importing data
+EL = data.frame(import("readability data for EL.xlsx"))
+# determining elite
+elite = c("harvard","mit","berkeley","stanford","chicago","princeton","penn","columbia","yale","nyu")
+EL$elite = 0
+for(i in 1:nrow(EL)){
+  if(match(EL$affiliation1[i], elite, nomatch = FALSE)){
+    EL$elite[i] = 1
+  }
+  if(match(EL$affiliation2[i], elite, nomatch = FALSE)){
+    EL$elite[i] = 1
+  }
+  if(match(EL$affiliation3[i], elite, nomatch = FALSE)){
+    EL$elite[i] = 1
+  }
+  if(match(EL$affiliation4[i], elite, nomatch = FALSE)){
+    EL$elite[i] = 1
+  }
+  if(match(EL$affiliation5[i], elite, nomatch = FALSE)){
+    EL$elite[i] = 1
+  }
+}
+# keeping all relevant variables
+variable = c("citations","pages","noauthor","nobel","elite","government","private","nonUS")
+trans = EL[,variable]
+table_1 = stargazer(trans, type = "text",summary.stat = c("mean", "sd", "min", "median", "max"),omit.stat=c("LL","ser","f"), no.space=TRUE)
+```
+
+## Figure 1
+```{r, message=FALSE}
+
+# creating bins
+n = 5
+plotdata = EL %>%
+  mutate(quantile = ntile(linsear.write, n))
+plotdata = plotdata[,c("citations","quantile","linsear.write")]
+# creating plots
+figure_1 = ggplot(plotdata, aes(quantile, citations)) +
+  stat_summary(fun.y = mean, geom = "bar") + 
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.2) + 
+  labs(x = "Quantile by Score", y = "Citations")
+figure_1  
+```
+
+## Table 3
+```{r, message=FALSE}
+EL$year = as.factor(EL$year) 
+# Creating dummy variables for each letter
+alphabet = LETTERS[seq( from = 1, to = 26)]
+Letter_dummies = (sapply(alphabet, function(alphabet) if_else(grepl(alphabet, EL$jel.codes),1, 0)))
+Letter_dummies = data.frame(Letter_dummies)
+# Keeping the ones included
+test = numeric(ncol(Letter_dummies))
+for(i in 1:ncol(Letter_dummies)){
+  test[i] =ifelse(sum(Letter_dummies[,i])>0,1,0)
+}
+Letter_dummies = Letter_dummies[,test>0]
+
+# creating 3 datasets for the regressions as stated in the paper
+EL = cbind(EL, Letter_dummies)
+EL[,c("order","volume","issue","jel.codes","affiliation1","affiliation2"
+      ,"affiliation3","affiliation4","affiliation5")] = NULL
+
+data1 = EL
+data2 = EL %>%
+  mutate(readability_top25 = ifelse(EL$linsear.write>= quantile(EL$linsear.write, 0.75),1,0))
+data3 = EL %>% 
+  mutate(readability_sd = ifelse(EL$linsear.write>= (mean(EL$linsear.write)
+                                                   +sd(EL$linsear.write)),1,0))
+
+# run regression on all of them
+model1 = lm(citations ~. , data = data1)
+model2 = lm(citations ~.-linsear.write , data = data2)
+model3 = lm(citations ~.-linsear.write , data = data3)
+
+# creating robust std. errors
+x = tidy(coeftest(model1, vcov = vcovHC(model1, type="HC1")))$std.error
+
+# stargazer
+model_labels = c("Score","Top 25%","> mu + sigma")
+
+stargazer(model1,model2,model3, type = "text", column.labels = model_labels
+          , model.numbers =  FALSE, omit = c("year",colnames(Letter_dummies)),
+          add.lines = list(c("JEL Codes?", "Yes", "Yes", "Yes"),
+                           c("Year Controls?", "Yes", "Yes", "Yes")),
+          order = c("linsear.write","readability_top25","readability_sd","words","pages","noauthor","nobel","elite",
+                    "government","private","nonUS"),
+          omit.stat=c("LL","ser","f"), no.space=TRUE)
+```
