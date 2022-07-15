@@ -1,4 +1,4 @@
-#Marketing Analytics Group Project Team 1 - Clustering Top NBA Players for FS Basketball
+#Marketing Analytics Project - Clustering Top NBA Players for FS Basketball
 
 library(caret)
 library(stringr)
